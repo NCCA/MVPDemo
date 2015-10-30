@@ -38,17 +38,14 @@ NGLScene::NGLScene()
 NGLScene::~NGLScene()
 {
   std::cout<<"Shutting down NGL, removing VAO's and Shaders\n";
-  delete m_light;
 }
 
-void NGLScene::resizeGL(int _w, int _h)
+void NGLScene::resizeGL(QResizeEvent *_event)
 {
-  // set the viewport for openGL we need to take into account retina display
-  // etc by using the pixel ratio as a multiplyer
-  glViewport(0,0,_w*devicePixelRatio(),_h*devicePixelRatio());
+  m_width=_event->size().width()*devicePixelRatio();
+  m_height=_event->size().height()*devicePixelRatio();
   // now set the camera size values as the screen size has changed
-  m_cam->setShape(45.0f,(float)width()/height(),0.05f,350.0f);
-  update();
+  m_cam.setShape(45.0f,(float)width()/height(),0.05f,350.0f);
 }
 
 
@@ -103,26 +100,22 @@ void NGLScene::initializeGL()
   ngl::Vec3 to(0,0,0);
   ngl::Vec3 up(0,1,0);
   // now load to our new camera
-  m_cam= new ngl::Camera(from,to,up);
+  m_cam.set(from,to,up);
   // set the shape using FOV 45 Aspect Ratio based on Width and Height
   // The final two are near and far clipping planes of 0.5 and 10
-  m_cam->setShape(45.0f,(float)720.0/576.0f,0.05f,350.0f);
-  shader->setShaderParam3f("viewerPos",m_cam->getEye().m_x,m_cam->getEye().m_y,m_cam->getEye().m_z);
+  m_cam.setShape(45.0f,(float)720.0/576.0f,0.05f,350.0f);
+  shader->setShaderParam3f("viewerPos",m_cam.getEye().m_x,m_cam.getEye().m_y,m_cam.getEye().m_z);
   // now create our light this is done after the camera so we can pass the
   // transpose of the projection matrix to the light to do correct eye space
   // transformations
-  ngl::Mat4 iv=m_cam->getViewMatrix();
+  ngl::Mat4 iv=m_cam.getViewMatrix();
   iv.transpose();
-  m_light = new ngl::Light(ngl::Vec3(-2,5,2),ngl::Colour(1,1,1,1),ngl::Colour(1,1,1,1),ngl::LightModes::POINTLIGHT );
-  m_light->setTransform(iv);
+  ngl::Light light(ngl::Vec3(-2,5,2),ngl::Colour(1,1,1,1),ngl::Colour(1,1,1,1),ngl::LightModes::POINTLIGHT );
+  light.setTransform(iv);
   // load these values to the shader as well
-  m_light->loadToShader("light");
-  // as re-size is not explicitly called we need to do this.
-  // set the viewport for openGL we need to take into account retina display
-  // etc by using the pixel ratio as a multiplyer
-  glViewport(0,0,width()*devicePixelRatio(),height()*devicePixelRatio());
-  m_text = new  ngl::Text(QFont("Arial",18));
-  m_text->setScreenSize(this->size().width(),this->size().height());
+  light.loadToShader("light");
+  m_text.reset(  new  ngl::Text(QFont("Arial",18)));
+  m_text->setScreenSize(width(),height());
 
 
 }
