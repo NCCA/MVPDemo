@@ -5,10 +5,17 @@
 #include <ngl/Light.h>
 #include <ngl/Material.h>
 #include <ngl/NGLInit.h>
+#include <ngl/NGLStream.h>
 #include <ngl/VAOPrimitives.h>
 #include <ngl/ShaderLib.h>
+#include <ngl/MultiBufferVAO.h>
 
-
+const  std::array<ngl::Vec3,3> NGLScene::s_triVerts=
+      {{
+        ngl::Vec3(-0.0f,0.5f,0.0f),
+        ngl::Vec3(0.5f,-0.5f,0.0f),
+        ngl::Vec3(-0.5f,-0.5f,0.0f)
+       }};
 
 
 NGLScene::NGLScene()
@@ -21,6 +28,39 @@ NGLScene::NGLScene()
  
 }
 
+void NGLScene::createTriangle()
+{
+
+  std::vector <ngl::Vec3> normals;
+  ngl::Vec3 n(0.0f,1.0f,0.0f);
+    normals.push_back(n);
+    normals.push_back(n);
+    normals.push_back(n);
+    // create a vao as a series of GL_TRIANGLES
+    m_tri.reset( ngl::VAOFactory::createVAO(ngl::multiBufferVAO,GL_TRIANGLES));
+    m_tri->bind();
+
+    // in this case we are going to set our data as the vertices above
+
+    m_tri->setData(ngl::AbstractVAO::VertexData(sizeof(s_triVerts),s_triVerts[0].m_x));
+    // now we set the attribute pointer to be 0 (as this matches vertIn in our shader)
+
+    m_tri->setVertexAttributePointer(0,3,GL_FLOAT,0,0);
+
+    m_tri->setData(ngl::AbstractVAO::VertexData(sizeof(s_triVerts),normals[0].m_x));
+    // now we set the attribute pointer to be 2 (as this matches normal in our shader)
+
+    m_tri->setVertexAttributePointer(2,3,GL_FLOAT,0,0);
+
+    m_tri->setNumIndices(sizeof(s_triVerts)/sizeof(ngl::Vec3));
+
+   // now unbind
+    m_tri->unbind();
+
+
+
+
+}
 
 NGLScene::~NGLScene()
 {
@@ -91,7 +131,7 @@ void NGLScene::initializeGL()
   // set the shape using FOV 45 Aspect Ratio based on Width and Height
   // The final two are near and far clipping planes of 0.5 and 10
   m_cam.setShape(45.0f,(float)720.0/576.0f,0.05f,350.0f);
-  shader->setShaderParam3f("viewerPos",m_cam.getEye().m_x,m_cam.getEye().m_y,m_cam.getEye().m_z);
+  shader->setUniform("viewerPos",m_cam.getEye().toVec3());
   // now create our light this is done after the camera so we can pass the
   // transpose of the projection matrix to the light to do correct eye space
   // transformations
@@ -103,6 +143,7 @@ void NGLScene::initializeGL()
   light.loadToShader("light");
   m_text.reset(  new  ngl::Text(QFont("Arial",18)));
   m_text->setScreenSize(width(),height());
+  createTriangle();
 
 
 }
@@ -121,10 +162,10 @@ void NGLScene::loadMatricesToShader()
   m_MVP= MV*m_project;
   normalMatrix=MV;
   normalMatrix.inverse();
-  shader->setShaderParamFromMat4("MV",MV);
-  shader->setShaderParamFromMat4("MVP",m_MVP);
-  shader->setShaderParamFromMat3("normalMatrix",normalMatrix);
-  shader->setShaderParamFromMat4("M",M);
+  shader->setUniform("MV",MV);
+  shader->setUniform("MVP",m_MVP);
+  shader->setUniform("normalMatrix",normalMatrix);
+  shader->setUniform("M",M);
 }
 
 void NGLScene::paintGL()
@@ -136,18 +177,7 @@ void NGLScene::paintGL()
   ngl::ShaderLib *shader=ngl::ShaderLib::instance();
   (*shader)["Phong"]->use();
 
-  // Rotation based on the mouse position for our global transform
-  ngl::Mat4 rotX;
-  ngl::Mat4 rotY;
-  // create the rotation matrices
-  rotX.rotateX(m_win.spinXFace);
-  rotY.rotateY(m_win.spinYFace);
-  // multiply the rotations
-  m_mouseGlobalTX=rotY*rotX;
-  // add the translations
-  m_mouseGlobalTX.m_m[3][0] = m_modelPos.m_x;
-  m_mouseGlobalTX.m_m[3][1] = m_modelPos.m_y;
-  m_mouseGlobalTX.m_m[3][2] = m_modelPos.m_z;
+
   m_scaleMat.scale(m_scale.m_x,m_scale.m_y,m_scale.m_z);
   m_tranMat.translate(m_pos.m_x,m_pos.m_y,m_pos.m_z);
   m_rX.rotateX(m_rot.m_x);
@@ -155,13 +185,14 @@ void NGLScene::paintGL()
   m_rZ.rotateZ(m_rot.m_z);
 
 
-   // get the VBO instance and draw the built in teapot
-  ngl::VAOPrimitives *prim=ngl::VAOPrimitives::instance();
   // draw
   glPolygonMode(GL_FRONT_AND_BACK,m_wireframe ? GL_LINE : GL_FILL);
 
   loadMatricesToShader();
-  prim->draw("bunny");
+  //prim->draw("bunny");
+  m_tri->bind();
+  m_tri->draw();
+  m_tri->unbind();
   glPolygonMode(GL_FRONT_AND_BACK,GL_FILL);
   QString text;
   int tp=10;
@@ -178,6 +209,7 @@ void NGLScene::paintGL()
   m_text->renderText(tp,18*5,text );
 
   ngl::Mat4 M=m_scaleMat*m_rZ*m_rY*m_rX*m_tranMat;
+
   tp=700;
   text.sprintf("Model Matrix");
   m_text->renderText(tp,18*1,text );
@@ -215,6 +247,33 @@ void NGLScene::paintGL()
   m_text->renderText(tp,18*37,text );
   text.sprintf("[ %+0.4f %+0.4f %+0.4f %+0.4f]",m_project.m_openGL[3],m_project.m_openGL[7],m_project.m_openGL[11],m_project.m_openGL[15]);
   m_text->renderText(tp,18*38,text );
+
+  tp=10;
+  text.sprintf("Original Triangle Vertices");
+  m_text->renderText(tp,18*10,text );
+  int y=11;
+  for(auto p : s_triVerts)
+  {
+    text.sprintf("[ %+0.4f %+0.4f %+0.4f +1.0]",p.m_x,p.m_y,p.m_z);
+    m_text->renderText(tp,18*y++,text );
+
+  }
+  y++;
+  m_text->setColour(1.0,0.0,0.0);
+
+  text.sprintf("Transformed Triangle Vertices");
+
+  m_text->renderText(tp,18*y++,text );
+  m_text->setColour(1.0,1.0,0.0);
+  for(auto p : s_triVerts)
+  {
+    ngl::Vec4 pt=m_MVP*p;
+    std::cout<<"pt "<<pt<<M<<'\n';
+    text.sprintf("[ %+0.4f %+0.4f %+0.4f %+0.4f]",pt.m_x,pt.m_y,pt.m_z,pt.m_w);
+    m_text->renderText(tp,18*y++,text );
+
+  }
+
 
 
 }
@@ -262,7 +321,7 @@ void NGLScene::keyPressEvent(QKeyEvent *_event)
 
 
   case Qt::Key_P :
-    m_project=ngl::perspective(35.0,float(width()/height()),0.1,500);
+    m_project=ngl::perspective(35.0,float(width()/height()),0.1f,500);
   break;
   case Qt::Key_M :
     m_project=ngl::ortho(-10,10,-10,10,10,-10);

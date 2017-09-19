@@ -2,9 +2,11 @@
 #define NGLSCENE_H_
 #include <ngl/Camera.h>
 #include <ngl/Text.h>
+#include <ngl/AbstractVAO.h>
 #include "WindowParams.h"
 #include <QOpenGLWindow>
 #include <memory>
+
 
 //----------------------------------------------------------------------------------------------------------------------
 /// @file NGLScene.h
@@ -109,7 +111,9 @@ private:
     ngl::Mat4 m_MVP;
     std::unique_ptr<ngl::Text>m_text;
     bool m_wireframe;
-
+    std::unique_ptr<ngl::AbstractVAO> m_tri;
+    void createTriangle();
+    const static std::array<ngl::Vec3,3> s_triVerts;
 };
 
 
