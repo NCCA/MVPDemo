@@ -2,8 +2,6 @@
 #include <QGuiApplication>
 
 #include "NGLScene.h"
-#include <ngl/Light.h>
-#include <ngl/Material.h>
 #include <ngl/NGLInit.h>
 #include <ngl/NGLStream.h>
 #include <ngl/VAOPrimitives.h>
@@ -37,7 +35,7 @@ void NGLScene::createTriangle()
     normals.push_back(n);
     normals.push_back(n);
     // create a vao as a series of GL_TRIANGLES
-    m_tri.reset( ngl::VAOFactory::createVAO(ngl::multiBufferVAO,GL_TRIANGLES));
+    m_tri= ngl::VAOFactory::createVAO(ngl::multiBufferVAO,GL_TRIANGLES);
     m_tri->bind();
 
     // in this case we are going to set our data as the vertices above
@@ -48,9 +46,9 @@ void NGLScene::createTriangle()
     m_tri->setVertexAttributePointer(0,3,GL_FLOAT,0,0);
 
     m_tri->setData(ngl::AbstractVAO::VertexData(sizeof(s_triVerts),normals[0].m_x));
-    // now we set the attribute pointer to be 2 (as this matches normal in our shader)
+    // now we set the attribute pointer to be 1 (as this matches normal in our shader)
 
-    m_tri->setVertexAttributePointer(2,3,GL_FLOAT,0,0);
+    m_tri->setVertexAttributePointer(1,3,GL_FLOAT,0,0);
 
     m_tri->setNumIndices(sizeof(s_triVerts)/sizeof(ngl::Vec3));
 
@@ -71,7 +69,7 @@ NGLScene::~NGLScene()
 
 void NGLScene::resizeGL( int _w, int _h )
 {
-  m_cam.setShape( 45.0f, static_cast<float>( _w ) / _h, 0.05f, 350.0f );
+  m_view=ngl::perspective( 45.0f, static_cast<float>( _w ) / _h, 0.05f, 350.0f );
   m_win.width  = static_cast<int>( _w * devicePixelRatio() );
   m_win.height = static_cast<int>( _h * devicePixelRatio() );
 }
@@ -104,22 +102,11 @@ void NGLScene::initializeGL()
   // add them to the program
   shader->attachShaderToProgram("Phong","PhongVertex");
   shader->attachShaderToProgram("Phong","PhongFragment");
-  // now bind the shader attributes for most NGL primitives we use the following
-  // layout attribute 0 is the vertex data (x,y,z)
-  shader->bindAttribute("Phong",0,"inVert");
-  // attribute 1 is the UV data u,v (if present)
-  shader->bindAttribute("Phong",1,"inUV");
-  // attribute 2 are the normals x,y,z
-  shader->bindAttribute("Phong",2,"inNormal");
 
   // now we have associated this data we can link the shader
   shader->linkProgramObject("Phong");
   // and make it active ready to load values
   (*shader)["Phong"]->use();
-  // the shader will use the currently active material and light0 so set them
-  ngl::Material m(ngl::STDMAT::GOLD);
-  // load our material values to the shader into the structure material (see Vertex shader)
-  m.loadToShader("material");
   // Now we will create a basic Camera from the graphics library
   // This is a static camera so it only needs to be set once
   // First create Values for the camera position
@@ -127,20 +114,23 @@ void NGLScene::initializeGL()
   ngl::Vec3 to(0,0,0);
   ngl::Vec3 up(0,1,0);
   // now load to our new camera
-  m_cam.set(from,to,up);
+  m_view=ngl::lookAt(from,to,up);
   // set the shape using FOV 45 Aspect Ratio based on Width and Height
   // The final two are near and far clipping planes of 0.5 and 10
-  m_cam.setShape(45.0f,(float)720.0/576.0f,0.05f,350.0f);
-  shader->setUniform("viewerPos",m_cam.getEye().toVec3());
-  // now create our light this is done after the camera so we can pass the
-  // transpose of the projection matrix to the light to do correct eye space
-  // transformations
-  ngl::Mat4 iv=m_cam.getViewMatrix();
-  iv.transpose();
-  ngl::Light light(ngl::Vec3(-2,5,2),ngl::Colour(1,1,1,1),ngl::Colour(1,1,1,1),ngl::LightModes::POINTLIGHT );
-  light.setTransform(iv);
-  // load these values to the shader as well
-  light.loadToShader("light");
+  m_project=ngl::perspective(45.0f,720.0f/576.0f,0.05f,350.0f);
+  shader->setUniform("viewerPos",from);
+  ngl::Vec4 lightPos(0.0f,2.0f,2.0f,0.0f);
+  shader->setUniform("light.position",lightPos);
+  shader->setUniform("light.ambient",0.0f,0.0f,0.0f,1.0f);
+  shader->setUniform("light.diffuse",1.0f,1.0f,1.0f,1.0f);
+  shader->setUniform("light.specular",0.8f,0.8f,0.8f,1.0f);
+  // gold like phong material
+  shader->setUniform("material.ambient",0.274725f,0.1995f,0.0745f,0.0f);
+  shader->setUniform("material.diffuse",0.75164f,0.60648f,0.22648f,0.0f);
+  shader->setUniform("material.specular",0.628281f,0.555802f,0.3666065f,0.0f);
+  shader->setUniform("material.shininess",51.2f);
+
+
   m_text.reset(  new  ngl::Text(QFont("Arial",18)));
   m_text->setScreenSize(width(),height());
   createTriangle();
